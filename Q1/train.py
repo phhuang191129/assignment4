@@ -15,7 +15,7 @@ def make_trainable(gaussians):
 
     ### YOUR CODE HERE ###
     # HINT: You can access and modify parameters from gaussians
-    if not gaussians.isotropic:
+    if not gaussians.is_isotropic:
         gaussians.pre_act_quats.requires_grad = True
     gaussians.pre_act_scales.requires_grad = True
     gaussians.means.requires_grad = True
@@ -158,7 +158,10 @@ def run_training(args):
             # HINT: Get img_size from train_dataset
             # HINT: Get per_splat from args.gaussians_per_splat
             # HINT: camera is available above
-            pred_img = None
+            # pred_img = None
+            pred_img, _, _ = scene.render(camera, per_splat=args.gaussians_per_splat, img_size=train_dataset.img_size,
+                                              bg_colour=(0.0, 0.0, 0.0))
+            
 
         pred_npy = pred_img.detach().cpu().numpy()
         pred_npy = (np.clip(pred_npy, 0.0, 1.0) * 255.0).astype(np.uint8)
@@ -186,7 +189,10 @@ def run_training(args):
             # HINT: Get img_size from test_dataset
             # HINT: Get per_splat from args.gaussians_per_splat
             # HINT: camera is available above
-            pred_img = None
+            # pred_img = None
+            pred_img, _, _ = scene.render(camera, per_splat=args.gaussians_per_splat, img_size=train_dataset.img_size,
+                                              bg_colour=(0.0, 0.0, 0.0))
+            
 
             gt_npy = gt_img.detach().cpu().numpy()
             pred_npy = pred_img.detach().cpu().numpy()

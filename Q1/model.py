@@ -242,7 +242,7 @@ class Gaussians:
             N = scales.shape[0]
             scales = scales.unsqueeze(-1)
             scales = torch.bmm(scales, scales)
-            I = torch.eye(3).repeat(N, 1, 1)
+            I = torch.eye(3).repeat(N, 1, 1).to(self.device)  # (N, 3, 3)
             cov_3D =  I*scales  # (N, 3, 3)
 
         # HINT: You can use a function from pytorch3d to convert quaternions to rotation matrices.
@@ -250,7 +250,7 @@ class Gaussians:
 
             ### YOUR CODE HERE ###
             R = quaternion_to_matrix(quats)
-            S = torch.diag_embed(scales)  # (N, 3, 3) diagonal matrices
+            S = torch.diag_embed(scales, device=self.device)  # (N, 3, 3) diagonal matrices
             RS = torch.bmm(R, S)  # (N, 3, 3)
             cov_3D = torch.bmm(RS, RS.transpose(1, 2))  # (N, 3, 3)
 
@@ -290,8 +290,6 @@ class Gaussians:
         ### YOUR CODE HERE ###
         # HINT: Can you find a function in this file that can help?
         cov_3D = self.compute_cov_3D(quats=quats, scales=scales)  # (N, 3, 3)
-        print("DEBUG cov_3D stats:", cov_3D.min().item(), cov_3D.mean().item(), cov_3D.max().item())
-        print("DEBUG scales stats:", scales.min().item(), scales.mean().item(), scales.max().item())
 
         ### YOUR CODE HERE ###
         # HINT: Use the above three variables to compute cov_2D
@@ -322,22 +320,8 @@ class Gaussians:
         ### YOUR CODE HERE ###
         # HINT: Do note that means_2D have units of pixels. Hence, you must apply a
         # transformation that moves points in the world space to screen space.
-        # means_2D = camera.transform_points_screen(means_3D)[:,:2]  # (N, 2)
-        cam_means_3D = camera.get_world_to_view_transform().transform_points(means_3D)
-        cam_means_3D = -cam_means_3D[:, :]/cam_means_3D[:, 2][:, None]
-        cam_means_3D[:, 2] = 1.0
-
-        fx, fy = camera.focal_length[0][0].item(), camera.focal_length[0][1].item()
-        px, py = camera.principal_point[0][0].item(), camera.principal_point[0][1].item()
-
-        proj_mat = torch.Tensor([
-            [fx, 0.0, px],
-            [0.0, fy, py],
-            [0.0, 0.0, 1.0]
-        ]).to(camera.device)
-
-        means_2D = torch.transpose(torch.matmul(proj_mat, torch.transpose(cam_means_3D, 0, 1))[:2], 0, 1)
-
+        means_2D = camera.transform_points_screen(means_3D)[:,:2]  # (N, 2)
+          
         return means_2D
 
     @staticmethod
@@ -495,26 +479,22 @@ class Scene:
         ### YOUR CODE HERE ###
         # HINT: Can you find a function in this file that can help?
         power = self.gaussians.evaluate_gaussian_2D(points_2D, means_2D, cov_2D_inverse) # (N, H*W)
-        print("DEBUG cov_2D stats:", cov_2D[:,0,0].min().item(), cov_2D[:,0,0].mean().item(), cov_2D[:,0,0].max().item())
-        print("DEBUG power stats:", power.min().item(), power.mean().item(), power.max().item())
 
         # Computing exp(power) with some post processing for numerical stability
         exp_power = torch.where(power > 0.0, 0.0, torch.exp(power))
 
         ### YOUR CODE HERE ###
         # HINT: Refer to README for a relevant equation.
-        # alphas = opacities.unsqueeze(1)*exp_power  # (N, H*W)
-        # alphas = torch.reshape(alphas, (-1, H, W))  # (N, H, W)
-        opacities = opacities.unsqueeze(1)
-        alphas = opacities.repeat(1, points_2D.shape[1])
-        alphas = alphas * exp_power 
+        alphas = opacities.unsqueeze(1)*exp_power  # (N, H*W)
         alphas = torch.reshape(alphas, (-1, H, W))  # (N, H, W)
+        # opacities = opacities.unsqueeze(1)
+        # alphas = opacities.repeat(1, points_2D.shape[1])
+        # alphas = alphas * exp_power 
+        # alphas = torch.reshape(alphas, (-1, H, W))  # (N, H, W)
 
         # Post processing for numerical stability
         alphas = torch.minimum(alphas, torch.full_like(alphas, 0.99))
         alphas = torch.where(alphas < 1/255.0, 0.0, alphas)
-        print("DEBUG alphas stats:", alphas.min().item(), alphas.mean().item(), alphas.max().item())
-        print("DEBUG opacities stats:", opacities.min().item(), opacities.mean().item(), opacities.max().item())
 
         return alphas
 
@@ -640,11 +620,9 @@ class Scene:
 
         ### YOUR CODE HERE ###
         # HINT: Refer to README for a relevant equation
-        # print(colours[colours.shape[0]//2][0][0], alphas[colours.shape[0]//2][0][0], transmittance[colours.shape[0]//2][0][0])
-        # input('=============')
+
         image = (colours*alphas*transmittance).sum(dim=0)  # (H, W, 3)
-        print("DEBUG colours stats:", colours.min().item(), colours.mean().item(), colours.max().item())
-        print("DEBUG image before bg stats:", image.min().item(), image.mean().item(), image.max().item())
+
 
         ### YOUR CODE HERE ###
         # HINT: Can you implement an equation inspired by the equation for colour?
@@ -652,7 +630,8 @@ class Scene:
 
         ### YOUR CODE HERE ###
         # HINT: Can you implement an equation inspired by the equation for colour?
-        mask = (alphas*transmittance).sum(dim=0)>0  # (H, W, 1)
+        mask = (alphas*transmittance).sum(dim=0) # (H, W, 1)
+         
 
         final_transmittance = transmittance[-1, ..., 0].unsqueeze(0)  # (1, H, W)
         return image, depth, mask, final_transmittance
