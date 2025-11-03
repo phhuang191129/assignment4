@@ -161,7 +161,6 @@ def run_test_3():
     ]).to(torch.float32)
 
     your_answer = gaussians.compute_means_2D(means_3D, camera)
-
     return torch.all(torch.isclose(your_answer, gt_answer, rtol=1e-4, atol=1e-8))
 
 def run_test_4():
