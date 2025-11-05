@@ -95,13 +95,22 @@ def optimize_mesh_texture(
 
         # Forward pass
         # Render a randomly sampled camera view to optimize in this iteration
-        rend = 
+        azim = torch.rand(1).item() * 360
+        R, T = pytorch3d.renderer.cameras.look_at_view_transform(dist=3, elev=0, azim=azim)
+        cameras = pytorch3d.renderer.cameras.FoVPerspectiveCameras(device=device, R=R,T=T)
+        lights = pytorch3d.renderer.PointLights(location=[[0, 0, -3]], device=device)
+
+        rend =  renderer(mesh, cameras=cameras, lights=lights)
         # Encode the rendered image to latents
-        latents = 
+        latents = sds.encode_imgs(rend[..., :3].permute(0, 3, 1, 2))
         # Compute the loss
-        loss =
-
-
+        if args.pixel_sds:
+            loss =sds.sds_loss_in_pixel_space(imgs=rend[..., :3].permute(0, 3, 1, 2),
+                                                text_embeddings=embeddings['default'],
+                                                text_embeddings_uncond=embeddings['uncond'], guidance_scale=100, grad_scale=1)
+        else:
+            loss =sds.sds_loss(latents=latents, text_embeddings=embeddings['default'], \
+                                text_embeddings_uncond=embeddings['uncond'], guidance_scale=100, grad_scale=1)
 
         # Backward pass
         loss.backward()
@@ -151,6 +160,7 @@ if __name__ == "__main__":
         default="data/cow.obj",
         help="Path to the input mesh",
     )
+    parser.add_argument("--pixel_sds", action="store_true", help="Use SDS loss in pixel space")
     args = parser.parse_args()
 
     seed_everything(args.seed)

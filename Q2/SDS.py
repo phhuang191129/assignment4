@@ -151,19 +151,79 @@ class SDS:
         # predict the noise residual with unet, NO grad!
         with torch.no_grad():
             ### YOUR CODE HERE ###
- 
-
+            eps = torch.randn_like(latents)
+            z_t = self.alphas[t].sqrt()*latents + (1 - self.alphas[t]).sqrt()*eps
+            eps_hat_cond = self.unet(z_t, t, encoder_hidden_states=text_embeddings).sample
             if text_embeddings_uncond is not None and guidance_scale != 1:
                 ### YOUR CODE HERE ###
-                pass
- 
-
+                eps_hat_uncond = self.unet(z_t, t, encoder_hidden_states=text_embeddings_uncond).sample
+                eps_hat = eps_hat_uncond + guidance_scale * (eps_hat_cond - eps_hat_uncond)
+            else:
+                eps_hat = eps_hat_cond
 
         # Compute SDS loss
         w = 1 - self.alphas[t]
         ### YOUR CODE HERE ###
+        g = -w*(eps_hat - eps)*grad_scale
+        with torch.no_grad():
+            target = latents+g
+
+        loss = torch.nn.functional.mse_loss(latents, target) 
+
+        return loss
 
 
-        loss = 
+    def sds_loss_in_pixel_space(
+        self,
+        imgs,
+        text_embeddings,
+        text_embeddings_uncond=None,
+        guidance_scale=100,
+        grad_scale=1,
+    ):
+        """
+        Compute the SDS loss in pixel space.
+
+        Args:
+            latents (tensor): input latents, shape [1, 4, 64, 64]
+            text_embeddings (tensor): conditional text embedding (for positive prompt), shape [1, 77, 1024]
+            text_embeddings_uncond (tensor, optional): unconditional text embedding (for negative prompt), shape [1, 77, 1024]. Defaults to None.
+            guidance_scale (int, optional): weight scaling for guidance. Defaults to 100.
+            grad_scale (int, optional): gradient scaling. Defaults to 1.
+
+        Returns:
+            loss (tensor): SDS loss
+        """
+
+        # sample a timestep ~ U(0.02, 0.98) to avoid very high/low noise level
+        t = torch.randint(
+            self.min_step,
+            self.max_step + 1,
+            (imgs.shape[0],),
+            dtype=torch.long,
+            device=self.device,
+        )
+
+        # predict the noise residual with unet, NO grad!
+        with torch.no_grad():
+            ### YOUR CODE HERE ###
+            eps = torch.randn_like(imgs)
+            z_t = self.alphas[t].sqrt()*imgs + (1 - self.alphas[t]).sqrt()*eps
+            eps_hat_cond = self.unet(z_t, t, encoder_hidden_states=text_embeddings).sample
+            if text_embeddings_uncond is not None and guidance_scale != 1:
+                ### YOUR CODE HERE ###
+                eps_hat_uncond = self.unet(z_t, t, encoder_hidden_states=text_embeddings_uncond).sample
+                eps_hat = eps_hat_uncond + guidance_scale * (eps_hat_cond - eps_hat_uncond)
+            else:
+                eps_hat = eps_hat_cond
+
+        # Compute SDS loss
+        w = 1 - self.alphas[t]
+        ### YOUR CODE HERE ###
+        g = -w*(eps_hat - eps)*grad_scale
+        with torch.no_grad():
+            target = imgs+g
+
+        loss = torch.nn.functional.mse_loss(imgs, target) 
 
         return loss

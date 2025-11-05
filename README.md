@@ -230,85 +230,36 @@ Here are a few possible ideas to try and improve performance:
 ---
 
 # 2. Diffusion-guided Optimization
-In this question, you will implement Score Distillation Sampling (SDS) loss and apply it to different applications, i.e. image optimization (Q2.1), mesh texture optimization (Q2.2), and nerf optimization (Q2.3).
 
-**Note**:
-* All the reference timing is based on a A5000, 24G memory GPU, using default parameters.
-* Search for "### YOUR CODE HERE ###" to check the code sections to implement.
-* We provide basic logging and visualization code. You are welcome to modify them as you like, but remember to follow the deliverables specified in *Submission* section in each question.
 
 
 ## 2.1 SDS Loss + Image Optimization (20 points)
-First, you will implement the SDS loss. We provide a skeleton code in `SDS.py` and you will fill up the `sds_loss` function. Hint: follow the [DreamFusion](https://arxiv.org/pdf/2209.14988.pdf) paper (Fig. 3) and the step-by-step guide in the comments. We provide `prepare_embeddings` in `utils.py` that compute the text embedding given text prompts. Take a look at what it is returning and then implement the followings:
 
-*  Implement SDS without guidance, i.e. with positive prompts only (`text_embeddings_uncond is None`). (10 pts)
-Essentially, SDS measures how a rendered view image matches a given text prompt, using a pre-trained diffusion model.
+```
+#iteration 400
+python Q21_image_optimization.py --prompt "a hamburger" --sds_gguidance 0
+#iteration 1000
+python Q21_image_optimization.py --prompt "a hamburger" --sds_guidance 1 --postfix _w_guidance
 
-* Implement SDS with guidance, i.e. with both positive and negative prompts (`text_embeddings_uncond is not None`). (10 pts)
-[Prior work](https://arxiv.org/pdf/2207.12598.pdf) has shown that classifier-free guidance significantly improves sampling fidelity and generative results. Basically, it mixes the score estimates of a conditional diffusion model and a jointly trained unconditional diffusion model. In our case, you will mix the predicted noise obtained from conditional prompt (positive prompt) and that obtained from an unconditional prompt (empty string as the negative prompt), and use the new predicted noise to compute the gradient.
+python Q21_image_optimization.py --prompt "a standing corgi dog" --sds_guidance 0
+python Q21_image_optimization.py --prompt "a standing corgi dog" --sds_guidance 1 --postfix _w_guidance
 
-Note that the default negative prompt is an empty string `""`, but you can still get its embedding and feed it to `sds_loss` as `text_embeddings_uncond`.
+python Q21_image_optimization.py --prompt "two cats fighting" --sds_guidance 0
+python Q21_image_optimization.py --prompt "two cats fighting" --sds_guidance 1 --postfix _w_guidance
 
-After implementing the loss, verify your implementation using image optimization. In `Q21_image_optimization.py`, implement the loss computation in the forward pass of the training loop. Use the `--prompt` argument to play with different prompt input and use `--sds_guidance` argument to toggle on and off the guidance setting for loss computation.
+python Q21_image_optimization.py --prompt "A robot dog playing with a real dog" --sds_guidance 0
+python Q21_image_optimization.py --prompt "A robot dog playing with a real dog" --sds_guidance 1 --postfix _w_guidance
 
-(Estimated time for image optimization per prompt: 80s for "sds_guidance=0" and 165s for "sds_guidance=1". About 12G memory is needed.)
+```
 
-**Note**: Q2.1 is for you to explore the implementation of SDS loss. After the full implementation, you should always use SDS loss with guidance, i.e. `sds_guidance=1` for the following questions.
-
-The following shows reference output that you would expect for sds loss without and with guidance. Note that the best result may not happen at the final iteration; thus save some intermediate results, e.g. per 100 iterations, to track and debug the training process. Also, feel free to use `--postfix` argument to modify the output directory so that results of multiple runs don't overwrite each other.
-<p align="center">
-  <img src="ref_output/Q21_a_hamburger_no_guidance.png" alt="Without guidance" width="45%"/>
-  &nbsp; &nbsp; &nbsp; &nbsp; <!-- This is for adding space between the images -->
-  <img src="ref_output/Q21_a_hamburger_w_guidance.png" alt="With guidance" width="45%"/>
-</p>
-<p align="center">
-  <em>Without guidance (400 iterations)</em>
-  &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-  <em>With guidance (1000 iterations)</em>
-</p>
-
-> <g>**Submission**</g>: On your webpage, show image output for four different prompts. Use the following two example prompts and two more of your own choice.
-* "a hamburger"
-* "a standing corgi dog" 
-
-For each case (with and without guidance), show the "prompt - image" pair and indicate how many iterations you trained to obtain the results.
 
 
 ## 2.2 Texture Map Optimization for Mesh (15 points)
-In this section, you are going to optimize the texture map of a mesh with fixed geometry using SDS loss.
 
-We provide a cow mesh in the `data` folder. You will load it and re-texture it given different text prompts.
 
-In `Q22_nerf_optimization.py`, we provide a skeleton code. The texture map is represented by a ColorField, similar to the NeRF architecture you have learned before. It takes in the 3D coordinate of vertices (1, N_v, 3) and output per vertex color (1, N_v, 3). The mesh will then take the output of the ColorField as its texture map.
 ```
-color_field = ColorField().to(device)  # input (1, N_v, xyz) -> output (1, N_v, rgb)
-mesh = pytorch3d.structures.Meshes(
-    verts=vertices,
-    faces=faces,
-    textures=TexturesVertex(verts_features=color_field(vertices)),
-)
-mesh = mesh.to(device)
+python Q22_mesh_optimization.py --prompt "red cow"
 ```
-
-Since we want to optimize the rendered views using SDS loss, you will create a training set of query cameras. You can either pre-define a list of query cameras
-```
-query_cameras = 
-```
-or randomly sample a camera pose on the fly in the training loop.
-
-In each iteration, you will create a randomly sampled camera (and optionally a randomly sampled light condition), render the camera view, and compute SDS loss on the rendered image.
-
-(Estimated time for mesh optimization per prompt: 13min. About 13G memory is needed.)
-
-The following shows sampled views for texture maps of different colors. (You should submit gifs with corresponding text prompts instead of static images.)
-<p align="center">
-  <img src="ref_output/Q22_a_dotted_black_and_white_cow.png" alt="B&W cow" width="45%"/>
-  &nbsp; &nbsp; &nbsp; &nbsp; <!-- This is for adding space between the images -->
-  <img src="ref_output/Q22_an_orange_golden_bull.png" alt="Orange bull" width="45%"/>
-</p>
-
-> <g>**Submission**</g>: On your webpage, show the gif of the final textured mesh given two different text prompts. You should be able to vary the color and texture pattern using diffent text prompts.
-
 
 ## 2.3 NeRF Optimization (15 points)
 In Q2.2, the geometry of the mesh is fixed and we only optimize the color texture. Now we are generalizing the 3D representation from a mesh to a NeRF model, where both the geometry and the color are learnable.

@@ -29,7 +29,11 @@ def optimize_nerf(
     """
 
     # Step 1. Create text embeddings from prompt
-    embeddings = prepare_embeddings(sds, prompt, neg_prompt, view_dependent=False)
+    if not args.view_dep_text:
+        view_dependent = False
+    else:
+        view_dependent = True
+    embeddings = prepare_embeddings(sds, prompt, neg_prompt, view_dependent=view_dependent)
 
     # Step 2. Set up NeRF model
     model = NeRFNetwork(args).to(device)
@@ -160,12 +164,21 @@ def optimize_nerf(
                 text_cond = embeddings["default"]
             else:
                 ### YOUR CODE HERE ###
-                pass
+                print(azimuth)
+                # from Dreamfusion:We experimented with different ways of interpolating the text embeddings, but found that simply taking the text embedding closest to the
+                # sampled azimuth worked well.
+                if 60>azimuth[0]>-60:
+                    text_cond = embeddings["front"]
+                elif -120<azimuth[0]<=-60 or 60<=azimuth[0]<120:
+                    text_cond = embeddings["side"]
+                else:
+                    text_cond = embeddings["back"]
 
   
             ### YOUR CODE HERE ###
-            latents = 
-            loss = 
+            latents = sds.encode_imgs(pred_rgb)
+            loss = sds.sds_loss(latents=latents, text_embeddings=text_cond, \
+                                text_embeddings_uncond=embeddings['uncond'], guidance_scale=100, grad_scale=1)
 
             # regularizations
             if args.lambda_entropy > 0:
@@ -301,10 +314,10 @@ if __name__ == "__main__":
     ### YOUR CODE HERE ###
     # You wil need to tune the following parameters to obtain good NeRF results
     ### regularizations
-    parser.add_argument('--lambda_entropy', type=float, default=0, help="loss scale for alpha entropy")
-    parser.add_argument('--lambda_orient', type=float, default=0, help="loss scale for orientation")
+    parser.add_argument('--lambda_entropy', type=float, default=1e-2, help="loss scale for alpha entropy")
+    parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
     ### shading options
-    parser.add_argument('--latent_iter_ratio', type=float, default=0, help="training iters that only use albedo shading")
+    parser.add_argument('--latent_iter_ratio', type=float, default=0.2, help="training iters that only use albedo shading")
 
 
     parser.add_argument(
